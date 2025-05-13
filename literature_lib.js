@@ -1,15 +1,15 @@
 {
-	"translatorID": "7fe1a017-ad35-4dc3-b0ac-be7ff196f9e2",
-	"label": "literaturelib",
-	"creator": "amirhosein",
-	"target": "^https?://(www\\.)?literaturelib.com/",
+	"translatorID": "22f0d7ab-7c7b-4c02-ba5b-aed41db25474",
+	"label": "literature.lib",
+	"creator": "a",
+	"target": "https://literaturelib.com",
 	"minVersion": "5.0",
 	"maxVersion": "",
 	"priority": 100,
 	"inRepository": true,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
-	"lastUpdated": "2025-04-30 10:37:24"
+	"lastUpdated": "2025-05-13 04:06:53"
 }
 
 function detectWeb(doc, url) {
@@ -25,7 +25,7 @@ function detectWeb(doc, url) {
 	// اگر صفحه جستجو یا آرشیو باشد
 	if (url.includes("/books") || url === "https://literaturelib.com/") {
 		Zotero.debug("🗂️ Multiple items page detected.");
-		return "multiple";
+		return "m????ultiple";
 	}
 
 	Zotero.debug("❓ Not detected.");
@@ -49,38 +49,62 @@ function scrapeBookPage(doc, url) {
 
 	let item = new Zotero.Item("book");
 
-	// استخراج عنوان کتاب
-	item.title = ZU.xpathText(doc, "/html/body/div/div[3]/div[1]/div[1]/div/div/p") ||
-				ZU.xpathText(doc, "//p[contains(@class, 'text-[#ECECEC]')]") || 
-			 	ZU.xpathText(doc, "//h1") || 
+	// عنوان
+	item.title = ZU.xpathText(doc, "//h1") ||
+				 ZU.xpathText(doc, "//p[contains(@class, 'text-[#ECECEC]')]") || 
+				 "عنوان نامشخص";
 	Zotero.debug(`📌 Title: ${item.title}`);
 
-
-
-	// استخراج نام نویسنده
-	let author = ZU.xpathText(doc, "//td[contains(@class, 'value')]"); 
+	// نویسنده
+	let author = ZU.xpathText(doc, "//td[contains(@class, 'value') and contains(@class, '!text-right')]");
 	if (author) {
-		item.creators.push({ lastName: author, creatorType: "author" });
+		item.creators.push({
+			firstName: "",
+			lastName: author,
+			creatorType: "author",
+			fieldMode: 1
+		});
 		Zotero.debug(`🖊️ Author: ${author}`);
 	}
 
-	// استخراج ناشر
-	item.publisher = ZU.xpathText(doc, "//td[contains(@class, 'value')][2]");
+	// ناشر
+	item.publisher = ZU.xpathText(doc, "(//td[contains(@class, 'value')])[2]") || "";
 	Zotero.debug(`🏢 Publisher: ${item.publisher}`);
 
-	// استخراج لینک دانلود PDF
+	// استخراج سال چاپ با استفاده از ZU.xpath
+	let year = ZU.xpathText(doc, "//*[@id='simple-tabpanel-0']/div/p/div/div[1]/div/table/tbody/tr[2]/td");
+	
+	// اگر سال چاپ پیدا نشد، "سال نامشخص" قرار می‌دهیم
+	item.date = year ? year.trim() : "سال نامشخص";  
+	Zotero.debug(`📅 Year: ${item.date}`);
+
+	// فایل PDF
 	let pdfUrl = ZU.xpathText(doc, "//a[@download]/@href");
 	if (pdfUrl && !pdfUrl.startsWith("http")) {
-		pdfUrl = "https://literaturelib.com" + pdfUrl;  // اضافه کردن آدرس اصلی به لینک PDF
+		pdfUrl = new URL(pdfUrl, url).href;
 	}
 	if (pdfUrl) {
-		item.attachments.push({ title: "Full Text PDF", mimeType: "application/pdf", url: pdfUrl });
+		item.attachments.push({
+			title: "Full Text PDF",
+			mimeType: "application/pdf",
+			url: pdfUrl
+		});
 		Zotero.debug(`📄 PDF URL: ${pdfUrl}`);
+	}
+
+	// خلاصه
+	let summary = ZU.xpathText(doc, "//*[@id='simple-tabpanel-0']//div[contains(@class,'lg:w-6/12')]//div//p//span//span");
+	if (summary) {
+		item.abstractNote = summary.trim();
+		Zotero.debug(`📝 Summary: ${item.abstractNote}`);
 	}
 
 	item.url = url;
 	item.complete();
 }
+
+
+
 function processMultiple(doc, url) {
 	Zotero.debug("🔎 Scraping multiple items page...");
 
@@ -116,17 +140,5 @@ function processMultiple(doc, url) {
 
 /** BEGIN TEST CASES **/
 var testCases = [
-	{
-		"type": "web",
-		"url": "https://literaturelib.com/books/13362",
-		"detectedItemType": false,
-		"items": []
-	},
-	{
-		"type": "web",
-		"url": "https://literaturelib.com/books?find_in=%D8%B3%D9%84%D8%A7%D9%85",
-		"detectedItemType": true,
-		"items": []
-	}
 ]
 /** END TEST CASES **/
