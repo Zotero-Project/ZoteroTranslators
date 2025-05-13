@@ -2,17 +2,17 @@
 	"translatorID": "ac27bfc1-c31a-4329-a3c4-7de01b99f5dc",
 	"label": "molapub.ir",
 	"creator": "amirhosein",
-	"target": "https://www.molapub.ir/",
+	"target": "https://www.molapub.ir",
 	"minVersion": "5.0",
 	"maxVersion": "",
 	"priority": 100,
 	"inRepository": true,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
-	"lastUpdated": "2025-04-28 14:34:14"
+	"lastUpdated": "2025-05-13 05:20:58"
 }
 
- function detectWeb(doc, url) {
+function detectWeb(doc, url) {
 	Zotero.debug("MolaPub: Running detectWeb for URL: " + url);
 
 	// اول صفحات کتاب تکی را چک کن
@@ -26,13 +26,14 @@
 		/\/products\/?$/.test(url) || 
 		/^(https?:\/\/)?(www\.)?molapub\.ir\/?$/.test(url)) {
 		Zotero.debug("MolaPub: Detected archive or home page (multiple)");
-		return "multiple";
+		return "m????????ultiple";
 	}
 
 	Zotero.debug("MolaPub: No relevant page detected");
 	return false;
 }
- function doWeb(doc, url) {
+
+function doWeb(doc, url) {
 	Zotero.debug("MolaPub: Starting doWeb");
 
 	let type =  detectWeb(doc, url);
@@ -44,8 +45,8 @@
 		 scrapeBookPage(doc, url);
 	}
 }
- function processMultiple(doc, url) {
-	console.log("SALAM");
+
+function processMultiple(doc, url) {
 	let items = {};
 
 	let loopLinks = doc.querySelectorAll("a.image-link");
@@ -65,8 +66,6 @@
 		items[fullHref] = title;
 	}
 
-	console.log("آیتم‌ها شناسایی شده:", items); // نمایش آیتم‌ها
-
 	if (Object.keys(items).length > 0) {
 		Zotero.selectItems(items, function(selectedItems) {
 			if (!selectedItems) return;
@@ -78,25 +77,16 @@
 	}
 }
 
-
-
- function scrapeBookPage(doc, url) {
+function scrapeBookPage(doc, url) {
 	Zotero.debug("MolaPub: Scraping book page: " + url);
 
 	let newItem = new Zotero.Item("book");
 
 	// عنوان کتاب
-	let titleElement = doc.querySelector(
-		'h2, ' +
-		'a.title.text-truncate, ' +
-		'app-breadcrumb mat-card div:nth-child(2) span b, ' +
-		'app-breadcrumb mat-card div:nth-child(3) span b, ' +
-		'#mat-tab-content-2-0 div app-products-carousel div div div mat-card a.title.text-truncate, ' +
-		'#mat-tab-content-2-0 div app-products-carousel div div div.swiper-slide.ng-star-inserted.swiper-slide-next mat-card a.title.text-truncate'
-	);
+	let titleElement = doc.querySelector('h2');  // انتخاب تگ <h2> که عنوان کتاب در آن است
 	if (titleElement) {
 		let rawTitle = titleElement.textContent.trim();
-		newItem.title = rawTitle.split('/')[0].trim();
+		newItem.title = rawTitle.split('/')[0].trim(); // اگر عنوان کتاب با / جدا شده بود، تنها قسمت اول را بگیریم
 		Zotero.debug("MolaPub: Title found: " + newItem.title);
 	} else {
 		newItem.title = "Untitled Book";
@@ -150,23 +140,9 @@
 	if (price) {
 		newItem.notes.push({ note: "قیمت: " + price.textContent.trim() });
 	}
-
+	
 	// URL
 	newItem.url = url;
-
-	// تصویر جلد (اگر Base64 باشد)
-	let imgElement = doc.querySelector('img');
-	if (imgElement) {
-		let imgSrc = imgElement.getAttribute('src');
-		if (imgSrc && imgSrc.startsWith('data:image')) {
-			newItem.attachments.push({
-				title: "Book cover",
-				mimeType: "image/jpeg", 
-				url: imgSrc,
-				snapshot: false
-			});
-		}
-	}
 
 	Zotero.debug("MolaPub: Completing item...");
 	newItem.complete();
