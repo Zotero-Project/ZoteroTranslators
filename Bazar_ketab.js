@@ -1,6 +1,6 @@
 {
 	"translatorID": "12345678-abcd-efgh-ijkl-9876543210mn",
-	"label": "Iranian Book Market",
+	"label": "Bazar Ketab",
 	"creator": "نام شما",
 	"target": "^https?://bazarketab\\.ir/",
 	"minVersion": "4.0",
