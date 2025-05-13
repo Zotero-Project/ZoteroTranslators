@@ -41,11 +41,11 @@ function detectWeb(doc, url) {
 	if (idRe.test(url)) {
 		return "book";
 	}
-	else if (/\/Specials\/(\d+)(\/[^\/]*)?$/.test(url)
-		|| /\/user\/library\//.test(url)
-		|| /\/book\/list/.test(url)) {
-		return "multiple";
-	}
+	// else if (/\/Specials\/(\d+)(\/[^\/]*)?$/.test(url)
+	// 	|| /\/user\/library\//.test(url)
+	// 	|| /\/book\/list/.test(url)) {
+	// 	return "multiple";
+	// }
 	return false;
 }
 
@@ -72,24 +72,24 @@ function getSearchResults(doc, checkOnly) {
 
 
 function doWeb(doc, url) {
-	if (detectWeb(doc, url) == "multiple") {
-		let items = getSearchResults(doc, false);
-		let selectItems = {};
-		for (let href in items) {
-			selectItems[href] = items[href].title;
-		}
-		Zotero.selectItems(selectItems, function (selectedItems) {
-			if (!selectedItems) return;
-			let urls = Object.keys(selectedItems);
-			for (let selectedUrl of urls) {
-				let coverURL = items[selectedUrl]?.coverURL;
-				ZU.processDocuments([selectedUrl], function (doc) {
-					scrape(doc, selectedUrl, coverURL);
-				});
-			}
-		});
-	}
-	else {
+	// if (detectWeb(doc, url) == "multiple") {
+	// 	let items = getSearchResults(doc, false);
+	// 	let selectItems = {};
+	// 	for (let href in items) {
+	// 		selectItems[href] = items[href].title;
+	// 	}
+	// 	Zotero.selectItems(selectItems, function (selectedItems) {
+	// 		if (!selectedItems) return;
+	// 		let urls = Object.keys(selectedItems);
+	// 		for (let selectedUrl of urls) {
+	// 			let coverURL = items[selectedUrl]?.coverURL;
+	// 			ZU.processDocuments([selectedUrl], function (doc) {
+	// 				scrape(doc, selectedUrl, coverURL);
+	// 			});
+	// 		}
+	// 	});
+	// }
+	/* else */ {
 		scrape(doc, url);
 	}
 }
@@ -127,34 +127,65 @@ function scrape(doc, url, coverURL) {
 
 
 
-			let creatorDivs = doc.querySelectorAll('div[id^="creator"] > div');
-			for (let creatorDiv of creatorDivs) {
-				let roleDiv = creatorDiv.querySelector('div');
-				let nameLink = creatorDiv.querySelector('a');
-				if (!roleDiv || !nameLink) continue;
+			// let creatorDivs = doc.querySelectorAll('div[id^="creator"] > div');
+			// for (let creatorDiv of creatorDivs) {
+			// 	let roleDiv = creatorDiv.querySelector('div');
+			// 	let nameLink = creatorDiv.querySelector('a');
+			// 	if (!roleDiv || !nameLink) continue;
 
-				let role = roleDiv.textContent.trim();
-				let name = nameLink.textContent.trim();
+			// 	let role = roleDiv.textContent.trim();
+			// 	let name = nameLink.textContent.trim();
+
+			// 	if (!name) continue;
+
+			// 	let zoteroRole;
+			// 	if (role.includes('نویسنده')) {
+			// 		zoteroRole = 'author';
+			// 	} else if (role.includes('مترجم')) {
+			// 		zoteroRole = 'translator';
+			// 	} else if (role.includes('مصحح')) {
+			// 		zoteroRole = 'editor'; 
+			// 	} else if (role.includes('خطاط')) {
+			// 		zoteroRole = 'editor';
+			// 	}
+			// 	 else {
+			// 		continue; 
+			// 	}
+
+			// 	let creator = ZU.cleanAuthor(name.replace(/،/g, ','), zoteroRole, true);
+			// 	item.creators.push(creator);
+			// }
+
+
+
+
+
+			let creatorDivs = Array.from(doc.querySelectorAll("div[id^='creator']"));
+			// از دومین div شروع می‌کنیم، یعنی index = 1
+			for (let i = 1; i < creatorDivs.length; i++) {
+				let container = creatorDivs[i];
+				let roleElement = container.querySelector('div > div');
+				let nameElement = container.querySelector('div > a');
+
+				if (!roleElement || !nameElement) continue;
+
+				let role = roleElement.textContent.trim();
+				let name = nameElement.textContent.trim();
 
 				if (!name) continue;
 
-				let zoteroRole;
 				if (role.includes('نویسنده')) {
-					zoteroRole = 'author';
+					item.creators.push(ZU.cleanAuthor(name, 'author'));
 				} else if (role.includes('مترجم')) {
-					zoteroRole = 'translator';
+					item.creators.push(ZU.cleanAuthor(name, 'translator'));
 				} else if (role.includes('مصحح')) {
-					zoteroRole = 'editor'; 
-				} else if (role.includes('خطاط')) {
-					zoteroRole = 'editor';
+					item.creators.push(ZU.cleanAuthor(name, 'editor'));
+				} else {
+					item.creators.push({ lastName: name, creatorType: 'contributor', fieldMode: 1 });
 				}
-				 else {
-					continue; 
-				}
-
-				let creator = ZU.cleanAuthor(name.replace(/،/g, ','), zoteroRole, true);
-				item.creators.push(creator);
 			}
+
+
 
 
 
@@ -202,8 +233,3 @@ function scrape(doc, url, coverURL) {
 		translator.translate();
 	});
 }
-
-/** BEGIN TEST CASES **/
-var testCases = [
-]
-/** END TEST CASES **/
