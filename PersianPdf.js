@@ -2,7 +2,7 @@
 	"translatorID": "aa8495d1-181e-4f8b-9521-f3f66ed3100b",
 	"label": "PersianPdf",
 	"creator": "MohammadHossein",
-	"target": "",
+	"target": "https://persianpdf.com/",
 	"minVersion": "5.0",
 	"maxVersion": "",
 	"priority": 100,
