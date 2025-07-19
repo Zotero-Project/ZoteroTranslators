@@ -13,228 +13,109 @@
 }
 
 function detectWeb(doc, url) {
-	Zotero.debug("Checking item type...");
-
-	// اگر URL شامل /product/ باشد، یعنی صفحه کتاب تکی است
-	if (url.includes("/product/")) {
-		Zotero.debug("تشخیص داده شد: کتاب تکی");
-		return "book";
-	}
-
-	// اگر URL شامل product-category یا جستجو باشد، یعنی لیست چند کتاب است
-	if (
-		url === "https://asmaneketab.ir/" ||
-		url.includes("/product-category/") ||
-		url.includes("/?s=") ||
-		url.includes("post_type=product")
-	) {
-		Zotero.debug("تشخیص داده شد: لیست کتاب‌ها");
-		return "multiple";
-	}
-
-	// fallback در صورت نیاز
-	return false;
+    // اگر URL شامل /product/ باشد، یعنی صفحه کتاب تکی است
+    if (url.includes("/product/")) {
+        return "book";
+    }
+    return false;
 }
 
 function doWeb(doc, url) {
-  Zotero.debug("doWeb function called.");
-  let result = detectWeb(doc, url);
-
-  if (result === "book") {
-	scrapeBookPage(doc, url);
-  } else if (result === "multiple") {
-	processMultiple(doc);
-  }
+    // تابع scrapeBookPage را با توجه به نوع صفحه فراخوانی می‌کند
+    if (detectWeb(doc, url) === "book") {
+        scrapeBookPage(doc, url);
+    }
 }
 
 function scrapeBookPage(doc, url) {
-	Zotero.debug("Scraping book page...");
+    Zotero.debug("Scraping book page for asmaneketab.ir...");
 
-	let item = new Zotero.Item("book"); // نوع آیتم کتاب
+    let item = new Zotero.Item("book"); // یک آیتم جدید از نوع کتاب می‌سازد
+    item.url = url; // آدرس صفحه را ذخیره می‌کند
 
-	let rows = doc.querySelectorAll("#tab-additional_information table.shop_attributes tbody tr");
-	let fieldMap = {};
+    // تلاش برای استخراج اطلاعات از جدول مشخصات
+    let infoTable = doc.querySelector("#tab-additional_information table.shop_attributes tbody");
 
-	rows.forEach(row => {
-		let keyEl = row.querySelector("th");
-		let valueEl = row.querySelector("td p");
+    if (infoTable) {
+        Zotero.debug("✅ Information table found. Scraping from table.");
+        let fieldMap = {};
+        let rows = infoTable.querySelectorAll("tr");
 
-		if (keyEl && valueEl) {
-			let key = keyEl.textContent.trim();
-			let value = valueEl.textContent.trim();
-			fieldMap[key] = value;
-		}
-	});
+        rows.forEach(row => {
+            let keyEl = row.querySelector("th");
+            let valueEl = row.querySelector("td p, td");
 
-	item.title = fieldMap["نام کامل کتاب"];
-	if (!item.title) throw new Error("عنوان کتاب پیدا نشد.");
-	item.url = url;
+            if (keyEl && valueEl) {
+                let key = keyEl.textContent.trim();
+                let value = valueEl.textContent.trim();
+                fieldMap[key] = value;
+            }
+        });
 
-	if (fieldMap["نویسنده"]) {
-		item.creators.push({
-			firstName: "",
-			lastName: fieldMap["نویسنده"],
-			creatorType: "author",
-			fieldMode: 1
-		});
-	}
+        item.title = fieldMap["نام کامل کتاب"];
+        if (fieldMap["نویسنده"]) item.creators.push({ creatorType: "author", lastName: fieldMap["نویسنده"], fieldMode: 1 });
+        if (fieldMap["مترجم"]) item.creators.push({ creatorType: "translator", lastName: fieldMap["مترجم"], fieldMode: 1 });
+        if (fieldMap["محقق"]) item.creators.push({ creatorType: "contributor", lastName: fieldMap["محقق"], fieldMode: 1 });
+        item.publisher = fieldMap["ناشر"];
+        item.edition = fieldMap["نوبت چاپ"];
+        item.numPages = fieldMap["تعداد صفحات"];
+        item.ISBN = fieldMap["شابک"];
 
-	if (fieldMap["مترجم"]) {
-		item.creators.push({
-			firstName: "",
-			lastName: fieldMap["مترجم"],
-			creatorType: "translator",
-			fieldMode: 1
-		});
-	}
+    } else {
+        Zotero.debug("🟡 Information table not found. Falling back to H1 tag.");
+        let h1 = doc.querySelector("#main h1.product-title");
+        if (h1) {
+            let h1Text = h1.textContent.trim();
+            let processedText = h1Text.replace(/^کتاب\s+/, '').trim();
+            let parts = processedText.split('–');
 
-	if (fieldMap["مصحح"]) {
-		item.creators.push({
-			firstName: "",
-			lastName: fieldMap["مصحح"],
-			creatorType: "editor",
-			fieldMode: 1
-		});
-	}
+            if (parts.length >= 2) {
+                item.title = parts[0].trim();
+                item.creators.push({ creatorType: "author", lastName: parts[1].trim(), fieldMode: 1 });
+            } else {
+                item.title = processedText;
+            }
+        }
+    }
+    
+    // 🏷️ بخش جدید: استخراج برچسب‌ها (تگ‌ها)
+    try {
+        // انتخاب تمام تگ‌های <a> داخل دسته‌بندی محصول
+        let tagElements = doc.querySelectorAll("div.product_meta span.posted_in a");
+        if (tagElements.length > 0) {
+            Zotero.debug(`✅ Found ${tagElements.length} tags.`);
+            tagElements.forEach(tagEl => {
+                let tagName = tagEl.textContent.trim();
+                if (tagName) {
+                    item.tags.push(tagName);
+                }
+            });
+        }
+    } catch(e) {
+        Zotero.debug(`❗ Error processing tags: ${e}`);
+    }
 
-	item.publisher = fieldMap["ناشر"];
-	item.edition = fieldMap["نوبت چاپ"];
-	item.numPages = fieldMap["تعداد صفحات"];
+    // 🖼️ بخش اصلاح‌شده: استخراج تصویر جلد
+    try {
+        let coverImg = doc.querySelector("img.wp-post-image");
+        if (coverImg && coverImg.src) {
+            item.attachments.push({
+                title: "Book Cover",
+                mimeType: "image/jpeg",
+                url: coverImg.src,
+                // این گزینه باعث دانلود کپی عکس و نمایش آن به صورت پیش‌فرض می‌شود
+                snapshot: true 
+            });
+            Zotero.debug(`🖼️ Cover image attached: ${coverImg.src}`);
+        }
+    } catch (e) {
+        Zotero.debug(`❗ Error processing cover image: ${e}`);
+    }
+    
+    if (!item.title) {
+        Zotero.debug("❗ Could not find title. Aborting.");
+        return;
+    }
 
-	// تصویر جلد کتاب
-	let coverImg;
-	try {
-		coverImg = ZU.xpath(doc, "//img[contains(@class, 'wp-post-image') and @title]")[0];
-
-		if (coverImg && coverImg.src) {
-			let imageUrl = coverImg.src;
-			if (!imageUrl.startsWith("http")) {
-				imageUrl = new URL(imageUrl, url).href;
-			}
-
-			item.attachments.push({
-				title: "Book Cover",
-				mimeType: "image/jpeg",
-				url: imageUrl,
-				snapshot: true
-			});
-
-			Zotero.debug(`🖼️ Cover image attached: ${imageUrl}`);
-		} else {
-			Zotero.debug("❗ Cover image not found.");
-		}
-	} catch (e) {
-		Zotero.debug(`❗ Error processing cover image: ${e}`);
-	}
-
-	// انتخاب همه لینک‌ها در هر محصول که حاوی لینک دانلود باشند
-	let downloadLinks = doc.querySelectorAll(".woocommerce-product-details__short-description a");
-	let downloadForm = doc.querySelector(".somdn-download-form");
-	if(downloadLinks){
-		downloadLinks.forEach((downloadLink) => {
-		if (downloadLink && downloadLink.href) {
-			let pdfUrl = downloadLink.href;
-			// اگر لینک دانلود PDF موجود باشد، آن را به عنوان پیوست اضافه می‌کنیم
-			item.attachments.push({
-				title: "Full Text PDF",
-				mimeType: "application/pdf",
-				url: pdfUrl,
-				download: true
-			});
-
-			Zotero.debug("📄 PDF download link found and attached.");
-		} else {
-			Zotero.debug("❗ PDF download link not found.");
-		}
-		});
-	}
-	else if (downloadForm) {
-		let action = downloadForm.action;
-		let formData = {};
-
-		// پیدا کردن همه ورودی‌های مخفی فرم و استخراج داده‌ها
-		downloadForm.querySelectorAll("input[type='hidden']").forEach(input => {
-			formData[input.name] = input.value;
-		});
-
-		// ارسال درخواست POST برای دانلود
-		ZU.doPost(action, formData, function(responseText, responseObj) {
-			let filename = "book.pdf";
-			let disposition = responseObj.getResponseHeader("Content-Disposition");
-
-			// بررسی نام فایل از header
-			if (disposition) {
-				let match = disposition.match(/filename="?([^"]+)"?/);
-				if (match) {
-					filename = decodeURIComponent(match[1]);
-				}
-			}
-
-			// بررسی موفقیت پاسخ و اضافه کردن فایل PDF
-			if (responseObj.response) {
-				item.attachments.push({
-					title: "Full Text PDF",
-					mimeType: "application/pdf",
-					filename: filename,
-					download: true,
-					content: responseObj.response,  // محتوای فایل PDF به صورت باینری
-					encoding: "base64"  // در صورتی که نیاز به base64 باشد
-				});
-
-				Zotero.debug("📄 PDF downloaded and attached.");
-			} else {
-				Zotero.debug("❗ PDF download failed.");
-			}
-		});
-	}
-
-	// پایان ذخیره‌سازی آیتم
-	item.complete();
+    item.complete();
 }
-
-
-function processMultiple(doc, url) {
-	Zotero.debug("Processing multiple items...");
-
-	let items = {};
-
-	// حالت 1: صفحات دسته‌بندی
-	let loopLinks = doc.querySelectorAll("a.woocommerce-LoopProduct-link");
-	for (let link of loopLinks) {
-		let href = link.getAttribute("href");
-		if (!href || !href.includes("/product/")) continue;
-
-		let fullHref = new URL(href, url).href;
-		let title = link.querySelector(".woocommerce-loop-product__title")?.textContent.trim();
-		if (!title) title = link.textContent.trim() || fullHref;
-		items[fullHref] = title;
-	}
-
-	// حالت 2: صفحه اصلی با ساختار متفاوت
-	let mainPageItems = doc.querySelectorAll("div.item.product-item");
-	for (let itemDiv of mainPageItems) {
-		let title = itemDiv.querySelector(".item-title h2")?.textContent.trim();
-		let link = itemDiv.querySelector("a[href*='/product/']");
-		if (!title || !link) continue;
-
-		let href = link.getAttribute("href");
-		let fullHref = new URL(href, url).href;
-		items[fullHref] = title;
-	}
-
-	if (Object.keys(items).length === 0) {
-		Zotero.debug("هیچ کتابی پیدا نشد.");
-		return;
-	}
-
-	Zotero.selectItems(items, function (selectedItems) {
-		if (!selectedItems) return;
-		let urls = Object.keys(selectedItems);
-		ZU.processDocuments(urls, scrapeBookPage);
-	});
-}
-
-/** BEGIN TEST CASES **/
-var testCases = [
-]
-/** END TEST CASES **/
