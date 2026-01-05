@@ -2,17 +2,23 @@
 	"translatorID": "2b64b7de-2a72-4b86-9c2f-4f9c6fb2417f",
 	"label": "Qaf Book (ghbook.ir)",
 	"creator": "Codex",
-	"target": "^https?://www\\.ghbook\\.ir/index\\.php\\?option=com_dbook&task=viewbook&book_id=\\d+",
-	"minVersion": "3.0",
+	"target": "^https?://(?:www\\.)?ghbook\\.ir/index\\.php\\?option=com_dbook&task=viewbook&book_id=\\d+",
+	"minVersion": "5.0",
 	"maxVersion": "",
 	"priority": 100,
-	"inRepository": false,
+	"inRepository": true,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
 	"lastUpdated": "2026-01-05 00:00:00"
 }
 
+var ZU = Zotero.Utilities;
+
 function detectWeb(doc, url) {
+	Zotero.debug("Checking item type for URL: " + url);
+	if (url.indexOf("option=com_dbook") === -1 || url.indexOf("task=viewbook") === -1) {
+		return false;
+	}
 	if (url.includes("option=com_dbook") && url.includes("task=viewbook")) {
 		return "book";
 	}
@@ -20,7 +26,11 @@ function detectWeb(doc, url) {
 }
 
 function doWeb(doc, url) {
-	scrape(doc, url);
+	Zotero.debug("doWeb function called.");
+	var result = detectWeb(doc, url);
+	if (result === "book") {
+		scrape(doc, url);
+	}
 }
 
 function textFromSelector(doc, selector) {
@@ -29,8 +39,8 @@ function textFromSelector(doc, selector) {
 }
 
 function textFromXPath(doc, xpath) {
-	var node = doc.evaluate(xpath, doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-	return node ? ZU.trimInternal(node.textContent) : "";
+	var text = ZU.xpathText(doc, xpath);
+	return text ? ZU.trimInternal(text) : "";
 }
 
 function firstText(doc, selectors, xpaths) {
@@ -60,16 +70,19 @@ function imageFromSelector(doc, selector) {
 }
 
 function imageFromXPath(doc, xpath) {
-	var node = doc.evaluate(xpath, doc, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-	if (!node) return "";
-	if (node.nodeName && node.nodeName.toLowerCase() === "img") {
+	var nodes = ZU.xpath(doc, xpath);
+	if (!nodes || !nodes.length) return "";
+	var node = nodes[0];
+	if (node && node.nodeName && node.nodeName.toLowerCase() === "img") {
 		return node.getAttribute("src") || "";
 	}
 	return "";
 }
 
 function guessImageMimeType(url) {
-	var ext = ZU.getFileExtension(url).toLowerCase();
+	var cleanURL = url.split("?")[0].split("#")[0];
+	var dotIndex = cleanURL.lastIndexOf(".");
+	var ext = dotIndex !== -1 ? cleanURL.slice(dotIndex + 1).toLowerCase() : "";
 	if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
 	if (ext === "png") return "image/png";
 	if (ext === "gif") return "image/gif";
@@ -77,8 +90,27 @@ function guessImageMimeType(url) {
 	return "";
 }
 
+function resolveURL(href, baseURL) {
+	if (!href) return "";
+	try {
+		return new URL(href, baseURL).href;
+	} catch (e) {
+		return href;
+	}
+}
+
+function splitCreators(value) {
+	return value.split(/,|\u060C/).map(function (name) {
+		return ZU.trimInternal(name);
+	}).filter(function (name) {
+		return name;
+	});
+}
+
 function scrape(doc, url) {
+	Zotero.debug("Scraping book page: " + url);
 	var item = new Zotero.Item("book");
+	item.libraryCatalog = "Qaf Book";
 
 	var title = textFromSelector(doc, "#listing > h2 > span");
 	if (!title) {
@@ -86,6 +118,9 @@ function scrape(doc, url) {
 	}
 	if (!title) {
 		title = ZU.trimInternal(doc.title || "");
+	}
+	if (!title) {
+		Zotero.debug("Book title not found; continuing without title");
 	}
 	item.title = title;
 	item.url = url;
@@ -98,10 +133,13 @@ function scrape(doc, url) {
 		"/html/body/div[1]/div/div/div[2]/div/div[2]/div/div[1]/div/div/div/div/div/main/div/div/div/div[2]/div[1]/div[1]/div[2]/ul/li[1]/div[2]"
 	]);
 	if (author) {
-		item.creators.push({
-			lastName: author,
-			creatorType: "author",
-			fieldMode: 1
+		var authors = splitCreators(author);
+		authors.forEach(function (name) {
+			item.creators.push({
+				lastName: name,
+				creatorType: "author",
+				fieldMode: 1
+			});
 		});
 	}
 
@@ -184,11 +222,12 @@ function scrape(doc, url) {
 		coverURL = imageFromXPath(doc, "/html/body/div[1]/div/div/div[2]/div/div[2]/div/div[1]/div/div/div/div/div/main/div/div/div/div[2]/div[1]/div[1]/div[2]/div[1]/div/ul/li/div/img");
 	}
 	if (coverURL) {
-		coverURL = ZU.resolveRelativeURL(coverURL, url);
+		coverURL = resolveURL(coverURL, url);
 		var mimeType = guessImageMimeType(coverURL);
 		var attachment = {
 			title: "Cover Image",
-			url: coverURL
+			url: coverURL,
+			snapshot: false
 		};
 		if (mimeType) {
 			attachment.mimeType = mimeType;
