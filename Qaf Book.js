@@ -114,25 +114,36 @@ function findPdfLink(doc) {
 	var container = doc.querySelector("#popover1a43");
 	var links = [];
 	if (container) {
-		links = container.querySelectorAll("a[title]");
+		links = Array.prototype.slice.call(container.querySelectorAll("a[href]"));
 	}
 	if (!links || !links.length) {
-		links = doc.querySelectorAll("div[id^=\"popover\"] a[title]");
+		links = Array.prototype.slice.call(doc.querySelectorAll("div[id^=\"popover\"] a[href]"));
 	}
-	for (var i = 0; i < links.length; i++) {
-		var title = links[i].getAttribute("title") || "";
-		if (/pdf/i.test(title)) {
-			return links[i].getAttribute("href") || "";
+	var xpathNodes = ZU.xpath(doc, "/html/body/div[1]/div/div/div[2]/div/div[2]/div/div[1]/div/div/div/div/div/main/div/div/div/div[2]/div[1]/div[1]/div[1]/div[5]/ul/li[2]/div[1]/div/p/a");
+	if (xpathNodes && xpathNodes.length) {
+		links = links.concat(xpathNodes);
+	}
+	xpathNodes = ZU.xpath(doc, "/html/body/div[1]/div/div/div[2]/div/div[2]/div/div[1]/div/div/div/div/div/main/div/div/div/div[2]/div[1]/div[1]/div[1]/div[4]/ul/li[2]/div[1]/div/p/a");
+	if (xpathNodes && xpathNodes.length) {
+		links = links.concat(xpathNodes);
+	}
+
+	var candidates = links.filter(function (link) {
+		return link && link.getAttribute && link.getAttribute("href");
+	});
+
+	for (var i = 0; i < candidates.length; i++) {
+		var title = candidates[i].getAttribute("title") || "";
+		var href = candidates[i].getAttribute("href") || "";
+		if (/pdf/i.test(title) || /pdf/i.test(href) || /\.pdf(\?|#|$)/i.test(href)) {
+			return href;
 		}
 	}
-	var xpathNode = ZU.xpath(doc, "/html/body/div[1]/div/div/div[2]/div/div[2]/div/div[1]/div/div/div/div/div/main/div/div/div/div[2]/div[1]/div[1]/div[1]/div[5]/ul/li[2]/div[1]/div/p/a");
-	if (xpathNode && xpathNode.length) {
-		var node = xpathNode[0];
-		var nodeTitle = node.getAttribute("title") || "";
-		if (/pdf/i.test(nodeTitle)) {
-			return node.getAttribute("href") || "";
-		}
+
+	if (candidates.length === 1) {
+		return candidates[0].getAttribute("href") || "";
 	}
+
 	return "";
 }
 
