@@ -62,21 +62,52 @@ function firstText(doc, selectors, xpaths) {
 function imageFromSelector(doc, selector) {
 	var el = doc.querySelector(selector);
 	if (!el) return "";
-	if (el.tagName && el.tagName.toUpperCase() === "IMG") {
-		return el.getAttribute("src") || "";
+	var img = el;
+	if (!(el.tagName && el.tagName.toUpperCase() === "IMG")) {
+		img = el.querySelector("img");
 	}
-	var img = el.querySelector("img");
-	return img ? (img.getAttribute("src") || "") : "";
+	return getImageURLFromNode(img);
 }
 
 function imageFromXPath(doc, xpath) {
 	var nodes = ZU.xpath(doc, xpath);
 	if (!nodes || !nodes.length) return "";
 	var node = nodes[0];
-	if (node && node.nodeName && node.nodeName.toLowerCase() === "img") {
-		return node.getAttribute("src") || "";
+	if (node && node.nodeType === 2) {
+		return ZU.trimInternal(node.nodeValue || "");
 	}
-	return "";
+	var img = node;
+	if (node && node.nodeName && node.nodeName.toLowerCase() !== "img" && node.querySelector) {
+		img = node.querySelector("img");
+	}
+	return getImageURLFromNode(img);
+}
+
+function getImageURLFromNode(node) {
+	if (!node || !node.getAttribute) return "";
+	var src = pickImageAttr(node, "src");
+	if (!src) src = pickImageAttr(node, "data-src");
+	if (!src) src = pickImageAttr(node, "data-original");
+	if (!src) src = pickImageAttr(node, "data-lazy-src");
+	if (!src) src = pickImageAttr(node, "data-srcset");
+	if (!src) src = pickImageAttr(node, "srcset");
+	return src || "";
+}
+
+function pickImageAttr(node, attr) {
+	var val = node.getAttribute(attr);
+	if (!val) return "";
+	val = ZU.trimInternal(val);
+	if (attr === "srcset" || attr === "data-srcset") {
+		return parseSrcset(val);
+	}
+	return val;
+}
+
+function parseSrcset(value) {
+	var first = value.split(",")[0];
+	if (!first) return "";
+	return first.trim().split(/\s+/)[0];
 }
 
 function guessImageMimeType(url) {
@@ -223,11 +254,16 @@ function scrape(doc, url) {
 	}
 	if (coverURL) {
 		coverURL = resolveURL(coverURL, url);
+		if (!/^(https?|data):/i.test(coverURL)) {
+			coverURL = "";
+		}
+	}
+	if (coverURL) {
 		var mimeType = guessImageMimeType(coverURL);
 		var attachment = {
 			title: "Cover Image",
 			url: coverURL,
-			snapshot: false
+			snapshot: true
 		};
 		if (mimeType) {
 			attachment.mimeType = mimeType;
