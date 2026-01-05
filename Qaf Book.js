@@ -110,6 +110,32 @@ function parseSrcset(value) {
 	return first.trim().split(/\s+/)[0];
 }
 
+function findPdfLink(doc) {
+	var container = doc.querySelector("#popover1a43");
+	var links = [];
+	if (container) {
+		links = container.querySelectorAll("a[title]");
+	}
+	if (!links || !links.length) {
+		links = doc.querySelectorAll("div[id^=\"popover\"] a[title]");
+	}
+	for (var i = 0; i < links.length; i++) {
+		var title = links[i].getAttribute("title") || "";
+		if (/pdf/i.test(title)) {
+			return links[i].getAttribute("href") || "";
+		}
+	}
+	var xpathNode = ZU.xpath(doc, "/html/body/div[1]/div/div/div[2]/div/div[2]/div/div[1]/div/div/div/div/div/main/div/div/div/div[2]/div[1]/div[1]/div[1]/div[5]/ul/li[2]/div[1]/div/p/a");
+	if (xpathNode && xpathNode.length) {
+		var node = xpathNode[0];
+		var nodeTitle = node.getAttribute("title") || "";
+		if (/pdf/i.test(nodeTitle)) {
+			return node.getAttribute("href") || "";
+		}
+	}
+	return "";
+}
+
 function guessImageMimeType(url) {
 	var cleanURL = url.split("?")[0].split("#")[0];
 	var dotIndex = cleanURL.lastIndexOf(".");
@@ -259,16 +285,27 @@ function scrape(doc, url) {
 		}
 	}
 	if (coverURL) {
-		var mimeType = guessImageMimeType(coverURL);
+		var mimeType = guessImageMimeType(coverURL) || "image/jpeg";
 		var attachment = {
 			title: "Cover Image",
 			url: coverURL,
 			snapshot: true
 		};
-		if (mimeType) {
-			attachment.mimeType = mimeType;
-		}
+		attachment.mimeType = mimeType;
 		item.attachments.push(attachment);
+	}
+
+	var pdfURL = findPdfLink(doc);
+	if (pdfURL) {
+		pdfURL = resolveURL(pdfURL, url);
+		if (/^https?:/i.test(pdfURL)) {
+			item.attachments.push({
+				title: "Full Text PDF",
+				url: pdfURL,
+				mimeType: "application/pdf",
+				snapshot: true
+			});
+		}
 	}
 
 	item.complete();
